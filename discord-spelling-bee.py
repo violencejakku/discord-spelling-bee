@@ -99,6 +99,13 @@ async def start_games():
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name} and system engine is online!")
+    
+    # This guarantees the bot picks the correct daily puzzle the exact second it boots up!
+    day_of_month = int(datetime.utcnow().strftime("%d"))
+    puzzle_index = day_of_month % len(PUZZLE_LIBRARY)
+    global current_puzzle
+    current_puzzle = PUZZLE_LIBRARY[puzzle_index]
+    
     daily_scheduler.start()
 
 # 5. Background Task: Automatically runs midnight check
