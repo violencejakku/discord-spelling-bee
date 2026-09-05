@@ -1,7 +1,6 @@
 import os
 import discord
 from discord.ext import commands
-from discord.commands import bridge
 import http.server
 import threading
 
@@ -11,42 +10,42 @@ def run_fake_server():
     server.serve_forever()
 threading.Thread(target=run_fake_server, daemon=True).start()
 
-# 2. Bot Initialization using Pycord's Command Bridge
+# 2. Bot Initialization using standard discord.py
 intents = discord.Intents.default()
 intents.message_content = True
-bot = bridge.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 serverData = {}
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name} and synced with Discord!")
+    print(f"Logged in as {bot.user.name} and ready for text commands!")
 
-# 3. Modern Today Command
-@bot.bridge_command(description="Check today's Stats")
-async def today(ctx):
-    await ctx.defer(ephemeral=True)
-    guildID = str(ctx.guild.id)
-    
-    if guildID not in serverData or 'channelID' not in serverData[guildID]:
-        return await ctx.respond("Please use /set_channel first to initialize the bot.", ephemeral=True)
-        
-    await ctx.respond("Fetching your daily spelling bee stats...", ephemeral=True)
-
-# 4. Modern Set Channel Command
-@bot.bridge_command(description="Set the spelling bee channel")
+# 3. Text Command: !set_channel
+@bot.command(name="set_channel", description="Set the spelling bee channel")
 async def set_channel(ctx):
-    await ctx.defer(ephemeral=True)
     guildID = str(ctx.guild.id)
     serverData[guildID] = {"channelID": ctx.channel.id}
-    await ctx.respond(f"Spelling Bee channel set to {ctx.channel.mention}!", ephemeral=True)
+    await ctx.send(f"Spelling Bee channel set to this room! Now use !start_games_now to begin.")
 
-# 5. Global Start Switch
-@bot.bridge_command(description="Start games manually")
+# 4. Text Command: !start_games_now
+@bot.command(name="start_games_now", description="Start games manually")
 async def start_games_now(ctx):
-    await ctx.defer(ephemeral=True)
-    await ctx.respond("Spun up game loops globally across channels!", ephemeral=True)
+    guildID = str(ctx.guild.id)
+    if guildID not in serverData:
+        return await ctx.send("Please use !set_channel first to initialize this room.")
+        
+    await ctx.send("Spinning up daily spelling bee game data loops...")
+
+# 5. Text Command: !today
+@bot.command(name="today", description="Check today's Stats")
+async def today(ctx):
+    guildID = str(ctx.guild.id)
+    if guildID not in serverData:
+        return await ctx.send("Please use !set_channel first to initialize this room.")
+        
+    await ctx.send("Fetching your live daily spelling bee stats...")
 
 if TOKEN:
     bot.run(TOKEN)
