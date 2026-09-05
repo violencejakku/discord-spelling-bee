@@ -56,20 +56,14 @@ async def set_channel(ctx):
 
 @bot.command(description="Check today's Stats")
 async def today(ctx):
-    # This tells Discord to wait up to 15 minutes, and makes the waiting message secret (ephemeral)
     await ctx.interaction.response.defer(ephemeral=True)
     global serverData
-
-    # Check if channel is correct
     guildID = str(ctx.guild.id)
     if guildID not in serverData or ctx.channel.id != serverData[guildID]['channelID']:
         return await ctx.interaction.followup.send("This command can only be used in the Spelling Bee channel.", ephemeral=True)
-
-    # Get today's embed
     try:
         channel = bot.get_channel(int(serverData[guildID]['channelID']))
         if channel and 'messageID' in serverData[guildID]:
-            # Respond using followup since we deferred
             await ctx.interaction.followup.send("Creating new live stats message...", ephemeral=True)
             await send_info_again(guildID)
         else:
@@ -78,8 +72,6 @@ async def today(ctx):
         await ctx.interaction.followup.send("The original spelling bee message was not found.", ephemeral=True)
     except Exception as e:
         await ctx.interaction.followup.send("An error occurred while fetching today's stats.", ephemeral=True)
-Use code with caution.💡 Why this code says "No spelling bee game found for today"Take a look at this part of your code logic:pythonif channel and 'messageID' in serverData[guildID]:
-Use code with caution.This means the /today command only works if the bot has already successfully created a game message for today.If you are just setting up the bot for the first time, your server data does not have a messageID yet! To actually kick off the very first game so that messageID gets created, you need to use the initial setup command first (usually /set_channel or whatever start command the bot uses).Once you save the code above, Render will restart. Run your channel setup command first, and then /today will start working perfectly!Commit this updated code to GitHub, wait 2 minutes for Render to deploy it, and let me know if the "Application did not respond" error goes away!
 
 async def send_info_again(guildID):
     global serverData
