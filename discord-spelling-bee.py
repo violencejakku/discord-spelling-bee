@@ -5,7 +5,7 @@ import http.server
 import threading
 import json
 import requests
-from datetime import datetime
+import re
 
 # 1. Fake Web Server for Render Port Check
 def run_fake_server():
@@ -35,31 +35,43 @@ def save_data():
     with open(DB_FILE, "w") as f:
         json.dump(serverData, f)
 
-# 3. Reconstructed NYT Fetch Engine
+# 3. Built-in NYT Fetch & Scrape Engine
 async def start_games():
     print("Fetching today's puzzle from NYT...")
     try:
-        # Fetching raw data from NYT puzzle endpoint
         url = "https://nytimes.com"
         response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
         if response.status_code != 200:
             print("Failed to reach NYT website.")
             return
 
-        # Simple text find to parse NYT game variables safely
-        start_idx = response.text.find("window.gameData =")
-        if start_idx == -1:
+        # Scrape game data safely using regex pattern matching
+        match = re.search(r'window\.gameData\s*=\s*(\{.*?\});', response.text)
+        if not match:
             print("Could not parse NYT data structure.")
             return
             
-        # Reconstructing data payload
-        print("Spelling Bee data processed globally!")
+        game_data = json.loads(match.group(1))
+        today_data = game_data.get("today", {})
+        
+        center_letter = today_data.get("centerLetter", "").upper()
+        outer_letters = [l.upper() for l in today_data.get("outerLetters", [])]
+        all_letters = [center_letter] + outer_letters
+        
+        # Format the visual layout board
+        board_msg = (
+            "🐝 **NEW NYT SPELLING BEE GAME HAS BEGUN!** 🐝\n\n"
+            f"🟡 **Center Letter:** `{center_letter}`\n"
+            f"⚪ **Outer Letters:** " + " ".join([f"`{l}`" for l in outer_letters]) + "\n\n"
+            "💬 *Type your word guesses directly into the chat to earn points!*"
+        )
+
         for guild_id, data in serverData.items():
             channel_id = data.get("channelID")
             if channel_id:
                 channel = bot.get_channel(int(channel_id))
                 if channel:
-                    await channel.send("🐝 **A new Spelling Bee Game has begun!** Type your word guesses directly into the chat to earn points.")
+                    await channel.send(board_msg)
     except Exception as e:
         print(f"Error executing game loop engine: {e}")
 
@@ -98,23 +110,6 @@ async def today(ctx):
     if guildID not in serverData:
         return await ctx.send("❌ Please use `!set_channel` first.")
     await ctx.send("📊 Stats command refreshed. Type your word guesses right here to play!")
-
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("Error: No DISCORD_TOKEN found in environment variables.")
-    
-    # This line tells the bot to actually fire the background game builder!
-    await start_games()
-
-# 5. Text Command: !today
-@bot.command(name="today", description="Check today's Stats")
-async def today(ctx):
-    guildID = str(ctx.guild.id)
-    if guildID not in serverData:
-        return await ctx.send("Please use !set_channel first to initialize this room.")
-        
-    await ctx.send("Fetching your live daily spelling bee stats...")
 
 if TOKEN:
     bot.run(TOKEN)
