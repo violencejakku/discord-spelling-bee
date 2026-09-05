@@ -109,11 +109,14 @@ async def messages_between_sends(ctx, max_messages: int):
     
     await ctx.respond(f"Maximum messages set to **{max_messages}**.")
 
-@bot.command(description="Start the Spelling Bee games manually")
-@commands.is_owner()
+@bot.command(description="Start (or restart) today's games for all servers (Bot owner only)")
 async def start_games_now(ctx):
-    await ctx.respond("Starting Spelling Bee games now...", ephemeral=True)
-    await start_games()
+    await ctx.interaction.response.defer(ephemeral=True)
+    try:
+        await ctx.interaction.followup.send("Starting games...", ephemeral=True)
+        await start_games()
+    except Exception as e:
+        await ctx.interaction.followup.send("An error occurred while starting games.", ephemeral=True)
 
 @tasks.loop(time=datetime.time(hour=int(UTC_TIME)), reconnect=False)
 async def start_games():
