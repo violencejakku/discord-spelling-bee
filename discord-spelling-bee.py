@@ -56,6 +56,7 @@ async def set_channel(ctx):
 
 @bot.command(description="Check today's Stats")
 async def today(ctx):
+    await ctx.defer()
     global serverData
 
     # Check if channel is correct
