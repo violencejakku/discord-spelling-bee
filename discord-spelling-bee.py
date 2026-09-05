@@ -37,6 +37,9 @@ async def start_games_now(ctx):
         return await ctx.send("Please use !set_channel first to initialize this room.")
         
     await ctx.send("Spinning up daily spelling bee game data loops...")
+    
+    # This line tells the bot to actually fire the background game builder!
+    await start_games()
 
 # 5. Text Command: !today
 @bot.command(name="today", description="Check today's Stats")
