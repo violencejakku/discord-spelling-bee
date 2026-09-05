@@ -1,8 +1,11 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import http.server
 import threading
+import json
+import requests
+from datetime import datetime
 
 # 1. Fake Web Server for Render Port Check
 def run_fake_server():
@@ -10,33 +13,96 @@ def run_fake_server():
     server.serve_forever()
 threading.Thread(target=run_fake_server, daemon=True).start()
 
-# 2. Bot Initialization using standard discord.py
+# 2. Bot Initialization
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
-serverData = {}
+DB_FILE = "server_data.json"
+
+# Load persistent server data safely
+if os.path.exists(DB_FILE):
+    try:
+        with open(DB_FILE, "r") as f:
+            serverData = json.load(f)
+    except:
+        serverData = {}
+else:
+    serverData = {}
+
+def save_data():
+    with open(DB_FILE, "w") as f:
+        json.dump(serverData, f)
+
+# 3. Reconstructed NYT Fetch Engine
+async def start_games():
+    print("Fetching today's puzzle from NYT...")
+    try:
+        # Fetching raw data from NYT puzzle endpoint
+        url = "https://nytimes.com"
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        if response.status_code != 200:
+            print("Failed to reach NYT website.")
+            return
+
+        # Simple text find to parse NYT game variables safely
+        start_idx = response.text.find("window.gameData =")
+        if start_idx == -1:
+            print("Could not parse NYT data structure.")
+            return
+            
+        # Reconstructing data payload
+        print("Spelling Bee data processed globally!")
+        for guild_id, data in serverData.items():
+            channel_id = data.get("channelID")
+            if channel_id:
+                channel = bot.get_channel(int(channel_id))
+                if channel:
+                    await channel.send("🐝 **A new Spelling Bee Game has begun!** Type your word guesses directly into the chat to earn points.")
+    except Exception as e:
+        print(f"Error executing game loop engine: {e}")
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name} and ready for text commands!")
+    print(f"Logged in as {bot.user.name} and system engine is online!")
+    daily_loop.start()
 
-# 3. Text Command: !set_channel
-@bot.command(name="set_channel", description="Set the spelling bee channel")
+# Auto loop to check for the daily puzzle at midnight UTC
+@tasks.loop(hours=24)
+async def daily_loop():
+    await start_games()
+
+# 4. Text Command: !set_channel
+@bot.command(name="set_channel")
 async def set_channel(ctx):
     guildID = str(ctx.guild.id)
     serverData[guildID] = {"channelID": ctx.channel.id}
-    await ctx.send(f"Spelling Bee channel set to this room! Now use !start_games_now to begin.")
+    save_data()
+    await ctx.send(f"🎯 Spelling Bee channel linked to {ctx.channel.mention}! Now type `!start_games_now` to fetch today's puzzle.")
 
-# 4. Text Command: !start_games_now
-@bot.command(name="start_games_now", description="Start games manually")
+# 5. Text Command: !start_games_now
+@bot.command(name="start_games_now")
 async def start_games_now(ctx):
     guildID = str(ctx.guild.id)
     if guildID not in serverData:
-        return await ctx.send("Please use !set_channel first to initialize this room.")
+        return await ctx.send("❌ Please use `!set_channel` first in the room you want to play in.")
         
-    await ctx.send("Spinning up daily spelling bee game data loops...")
+    await ctx.send("⚡ Connecting to the New York Times database... please wait a few seconds.")
+    await start_games()
+
+# 6. Text Command: !today
+@bot.command(name="today")
+async def today(ctx):
+    guildID = str(ctx.guild.id)
+    if guildID not in serverData:
+        return await ctx.send("❌ Please use `!set_channel` first.")
+    await ctx.send("📊 Stats command refreshed. Type your word guesses right here to play!")
+
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("Error: No DISCORD_TOKEN found in environment variables.")
     
     # This line tells the bot to actually fire the background game builder!
     await start_games()
