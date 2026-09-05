@@ -10,7 +10,7 @@ def run_fake_server():
     server.serve_forever()
 threading.Thread(target=run_fake_server, daemon=True).start()
 
-# 2. Bot Initialization
+# 2. Bot Initialization (Using standard intents)
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -20,33 +20,28 @@ serverData = {}
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name}")
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
-    except Exception as e:
-        print(f"Failed to sync commands: {e}")
+    print(f"Logged in as {bot.user.name} and ready to play!")
 
-@bot.tree.command(name="today", description="Check today's Stats")
-async def today(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    guildID = str(interaction.guild.id)
+# 3. Today Command (Rewritten to old text style to prevent crashes)
+@bot.command(description="Check today's Stats")
+async def today(ctx):
+    await ctx.defer()
+    guildID = str(ctx.guild.id)
     
     if guildID not in serverData:
-        return await interaction.followup.send("Please use /set_channel first to initialize the bot.", ephemeral=True)
+        return await ctx.send("Please use !set_channel first to initialize the bot.")
         
-    await interaction.followup.send("Fetching your daily spelling bee stats...", ephemeral=True)
+    await ctx.send("Fetching your daily spelling bee stats...")
 
-@bot.tree.command(name="set_channel", description="Set the spelling bee channel")
-async def set_channel(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    guildID = str(interaction.guild.id)
-    serverData[guildID] = {"channelID": interaction.channel.id}
-    await interaction.followup.send(f"Spelling Bee channel set to {interaction.channel.mention}!", ephemeral=True)
+# 4. Set Channel Command
+@bot.command(description="Set the spelling bee channel")
+async def set_channel(ctx):
+    await ctx.defer()
+    guildID = str(ctx.guild.id)
+    serverData[guildID] = {"channelID": ctx.channel.id}
+    await ctx.send(f"Spelling Bee channel set to this room!")
 
 if TOKEN:
     bot.run(TOKEN)
 else:
     print("Error: No DISCORD_TOKEN found in environment variables.")
-
-bot.run(DISCORD_TOKEN)
