@@ -4,15 +4,17 @@ from discord.ext import commands, tasks
 import http.server
 import threading
 import json
+import requests
+from bs4 import BeautifulSoup
 from datetime import datetime
 
-# 1. Fake Web Server for Render Port Check
+# 1. RENDER PORT CHECK BYPASS (Keeps free server online)
 def run_fake_server():
     server = http.server.HTTPServer(('0.0.0.0', 10000), http.server.SimpleHTTPRequestHandler)
     server.serve_forever()
 threading.Thread(target=run_fake_server, daemon=True).start()
 
-# 2. Bot Initialization
+# 2. BOT INITIALIZATION
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -22,59 +24,57 @@ DB_FILE = "server_data.json"
 
 if os.path.exists(DB_FILE):
     try:
-        with open(DB_FILE, "r") as f:
-            serverData = json.load(f)
-    except:
-        serverData = {}
-else:
-    serverData = {}
+         with open(DB_FILE, "r") as f: serverData = json.load(f)
+    except: serverData = {}
+else: serverData = {}
 
 def save_data():
-    with open(DB_FILE, "w") as f:
-        json.dump(serverData, f)
+    with open(DB_FILE, "w") as f: json.dump(serverData, f)
 
-# 3. ROTATING PUZZLE DATABASE
-# Each index maps to a different calendar day rotation slot
-PUZZLE_LIBRARY = [
-    {
-        "center": "G", "outer": ["A", "I", "L", "N", "R", "T"],
-        "answers": ["ALIGN", "ALIGNING", "ANGLING", "GAIN", "GAINING", "GAIT", "GALA", "GALL", "GALLING", "GANG", "GANGING", "GIANT", "GILL", "GILT", "GINNING", "GLAD", "GLINT", "GLINTING", "GNARL", "GNARLING", "GNAT", "GRAIL", "GRAIN", "GRAINING", "GRANT", "GRANTING", "GRATING", "GRIN", "GRINING", "GRIT", "TAILGATING", "TRAILING", "TRAINING"]
-    },
-    {
-        "center": "E", "outer": ["A", "B", "L", "R", "T", "Y"],
-        "answers": ["ABLE", "ALERT", "ALTER", "BARE", "BARLEY", "BARTENDER", "BEAR", "BEARD", "BEAT", "BEET", "BEER", "BETRAY", "BLEAT", "EARL", "EARLY", "EARN", "LATE", "LATER", "LAYER", "LEATHER", "TEAL", "TEAR", "TREE", "YEAR", "YEARTY"]
-    },
-    {
-        "center": "O", "outer": ["C", "D", "I", "N", "R", "W"],
-        "answers": ["CROW", "CROWD", "CROWDING", "CORN", "COWBIRE", "COWARD", "DOOR", "DOWN", "DOWNWARD", "ICON", "INDOOR", "IRON", "NORDIC", "WINDROW", "WORD", "WORM", "WORN"]
-    },
-    {
-        "center": "I", "outer": ["C", "E", "K", "L", "N", "T"],
-        "answers": ["CEILING", "CLICK", "CLIENT", "CLINIC", "CLINK", "ELITE", "ICECLINK", "ICICLE", "INKLING", "KICK", "KICKING", "KILT", "KINETIC", "KNIT", "KNITTING", "LICE", "LICK", "LICKING", "LINE", "LINEN", "LINING", "LINK", "LINKING", "LINT", "LITTLE", "NICK", "NICKEL", "TICK", "TICKET", "TICKING", "TILT", "TILTING", "TINGLE", "TINGLING"]
-    }
-]
-
+# Global Live Game States
+nyt_center = "G"
+nyt_outer = ["A", "I", "L", "N", "R", "T"]
+nyt_answers = []
 found_words = []
-current_puzzle = PUZZLE_LIBRARY[0]
 
-# 4. Clean Formatting Board Layout
-async def start_games():
-    global found_words, current_puzzle
-    found_words = [] # Reset found pool for the day
-    
-    # Calculate a unique index based on the day of the month to pick a puzzle
-    day_of_month = int(datetime.utcnow().strftime("%d"))
-    puzzle_index = day_of_month % len(PUZZLE_LIBRARY)
-    current_puzzle = PUZZLE_LIBRARY[puzzle_index]
-    
-    c = current_puzzle["center"]
-    o = current_puzzle["outer"]
-    
+# 3. LIVE NEW YORK TIMES SCRAPER ENGINE
+async def fetch_live_nyt_puzzle():
+    global nyt_center, nyt_outer, nyt_answers, found_words
+    print("Connecting directly to New York Times...")
+    try:
+        url = "https://nytimes.com"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Look into NYT's secret game script container tags
+            scripts = soup.find_all('script')
+            for script in scripts:
+                if script.string and 'window.gameData' in script.string:
+                    # Clean out the javascript wrapper boundaries to capture pure data
+                    raw_js = script.string
+                    json_str = raw_js.split('window.gameData =', 1)[1].strip().rstrip(';')
+                    game_data = json.loads(json_str)
+                    
+                    today = game_data.get("today", {})
+                    nyt_center = today.get("centerLetter", "G").upper()
+                    nyt_outer = [l.upper() for l in today.get("outerLetters", ["A", "I", "L", "N", "R", "T"])]
+                    nyt_answers = [w.upper() for w in today.get("answers", [])]
+                    found_words = [] # Clear daily word cache tracking
+                    print("Successfully extracted active NYT puzzle database!")
+                    return True
+    except Exception as e:
+        print(f"Scraper error encountered: {e}")
+    return False
+
+# 4. GAME DESIGN PRINT ENGINE
+async def display_game_board():
     board_msg = (
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🐝  **NEW DAILY SPELLING BEE GAME HAS BEGUN!**  🐝\n"
+        "🐝  **LIVE NYT SPELLING BEE GAME HAS BEGUN!**  🐝\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "✨ **THE LETTERS TODAY ARE:**\n"
+        "✨ **TODAY'S OFFICIAL NYT LETTERS:**\n"
         "┌───────────────────────────────┐\n"
         "│                               │\n"
         "│       🟡  **CENTER:** `{}` (Must Use)  │\n"
@@ -82,46 +82,32 @@ async def start_games():
         "│       ⚪  **OUTER:**  {}  │\n"
         "│                               │\n"
         "└───────────────────────────────┘\n\n"
-        "📝 **HOW TO PLAY:**\n"
-        "• Words must contain at least **4 letters**.\n"
-        "• Words **MUST** use the center letter **{}**.\n"
-        "• Letters can be used more than once.\n\n"
+        "📝 **HOW TO EARN POINTS:**\n"
+        "• Words must match NYT's official solution database.\n"
+        "• Words must be **4+ letters** and use **{}**.\n\n"
         "💬 *Simply type your word guesses directly into this channel chat!*"
-    ).format(c, " ".join([f"`{l}`" for l in o]), c)
+    ).format(nyt_center, " ".join([f"`{l}`" for l in nyt_outer]), nyt_center)
 
     for guild_id, data in serverData.items():
-        channel_id = data.get("channelID")
-        if channel_id:
-            channel = bot.get_channel(int(channel_id))
-            if channel:
-                await channel.send(board_msg)
+        channel = bot.get_channel(int(data.get("channelID", 0)))
+        if channel: await channel.send(board_msg)
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name} and system engine is online!")
-    
-    # This guarantees the bot picks the correct daily puzzle the exact second it boots up!
-    day_of_month = int(datetime.utcnow().strftime("%d"))
-    puzzle_index = day_of_month % len(PUZZLE_LIBRARY)
-    global current_puzzle
-    current_puzzle = PUZZLE_LIBRARY[puzzle_index]
-    
-    daily_scheduler.start()
+    print(f"Logged in as {bot.user.name} - NYT Scraper System Live!")
+    await fetch_live_nyt_puzzle()
+    daily_sync.start()
 
-# 5. Background Task: Automatically runs midnight check
-@tasks.loop(minutes=30)
-async def daily_scheduler():
-    now = datetime.utcnow()
-    # If it is between 12:00 AM and 12:30 AM UTC, rotate the letters automatically
-    if now.hour == 0 and now.minute < 30:
-        print("Midnight UTC reached! Rotating letters...")
-        await start_games()
+# Automatic puzzle updates at midnight UTC
+@tasks.loop(hours=24)
+async def daily_sync():
+    if await fetch_live_nyt_puzzle():
+        await display_game_board()
 
-# 6. WATCHER ENGINE: Listens to text guesses in chat
+# 5. GUESS INTERCEPT ENGINE (Listens to text words in chat)
 @bot.event
 async def on_message(message):
-    if message.author == bot.user:
-        return
+    if message.author == bot.user: return
 
     guildID = str(message.guild.id)
     if guildID in serverData and message.channel.id == serverData[guildID]['channelID']:
@@ -131,54 +117,46 @@ async def on_message(message):
             await bot.process_commands(message)
             return
 
-        c_letter = current_puzzle["center"]
-        if c_letter not in guess:
+        if nyt_center not in guess:
             await message.add_reaction("❌")
             return
-
         if len(guess) < 4:
             await message.add_reaction("⚠️")
             return
 
-        if guess in current_puzzle["answers"]:
+        # Score words against the scraped NYT answer key
+        if guess in nyt_answers:
             if guess in found_words:
-                await message.add_reaction("🔄")
+                await message.add_reaction("🔄") # Already found
             else:
                 found_words.append(guess)
                 await message.add_reaction("✅")
                 points = 1 if len(guess) == 4 else len(guess)
                 
-                unique_letters = set(guess)
-                if len(unique_letters) >= 7:
-                    await message.channel.send(f"🎉 **PANGRAM!** {message.author.mention} found `{guess}` for **{points + 7} points**! 💥")
+                # Check for Pangram (uses all unique letters)
+                if len(set(guess)) >= 7:
+                    await message.channel.send(f"🎉 **PANGRAM!** {message.author.mention} discovered `{guess}` for **{points + 7} points**! 💥")
                 else:
-                    await message.channel.send(f"👍 Perfect! {message.author.mention} found `{guess}` for **{points} points**.")
+                    await message.channel.send(f"👍 Awesome! {message.author.mention} guessed `{guess}` for **{points} points**.")
         else:
-            await message.add_reaction("❌")
+            await message.add_reaction("❌") # Invalid NYT word
 
     await bot.process_commands(message)
 
-# 7. Setup Commands Layout
+# 6. CONFIGURATION MANAGEMENT COMMANDS
 @bot.command(name="set_channel")
 async def set_channel(ctx):
     guildID = str(ctx.guild.id)
     serverData[guildID] = {"channelID": ctx.channel.id}
     save_data()
-    await ctx.send(f"🎯 Channel linked successfully! Type `!start_games_now` to build the game frame.")
+    await ctx.send(f"🎯 Channel linked! Type `!start_games_now` to retrieve the current puzzle from NYT.")
 
 @bot.command(name="start_games_now")
 async def start_games_now(ctx):
     guildID = str(ctx.guild.id)
-    if guildID not in serverData:
-        return await ctx.send("❌ Use `!set_channel` first.")
-    await start_games()
+    if guildID not in serverData: return await ctx.send("❌ Use `!set_channel` first.")
+    await ctx.send("⚡ Scraping live puzzle variables directly from NYT databases... please hold.")
+    await fetch_live_nyt_puzzle()
+    await display_game_board()
 
-@bot.command(name="today")
-async def today(ctx):
-    guildID = str(ctx.guild.id)
-    if guildID not in serverData:
-        return await ctx.send("❌ Use `!set_channel` first.")
-    await ctx.send(f"📊 Words found so far today: `{len(found_words)}` total words.")
-
-if TOKEN:
-    bot.run(TOKEN)
+if TOKEN: bot.run(TOKEN)
