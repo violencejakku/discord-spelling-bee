@@ -286,4 +286,12 @@ async def on_ready():
     print(f"Logged in as {bot.user.name} (ID: {bot.user.id}, Version: {version})")
     await bot.change_presence(activity=discord.Game(f"Spelling Bee v{version}"))
     start_games.start()
+
+import http.server
+import threading
+def run_fake_server():
+    server = http.server.HTTPServer(('0.0.0.0', 10000), http.server.SimpleHTTPRequestHandler)
+    server.serve_forever()
+threading.Thread(target=run_fake_server, daemon=True).start()
+
 bot.run(DISCORD_TOKEN)
